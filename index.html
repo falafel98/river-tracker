@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wilsons River Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+        }
+        h1 {
+            color: #4db8ff;
+        }
+        table {
+            width: 80%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background: #2a2a2a;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #444;
+            text-align: center;
+        }
+        th {
+            background-color: #4db8ff;
+            color: #1e1e1e;
+        }
+        .rising {
+            color: #00ff00;
+        }
+        .falling {
+            color: #ff6666;
+        }
+        .steady {
+            color: #ffff00;
+        }
+       
+        canvas {
+            width: 800px !important;
+            height: 400px !important;
+            background-color: #2a2a2a;
+            margin: 20px auto;
+            display: block;
+            border: 1px solid #4db8ff;
+            max-height: 500px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+  
+<body>
+
+    <h1>Wilsons River & Northern NSW Waterways Tracker</h1>
+    <p>Live river height updates from BOM</p>
+
+    <h2>Browns Ck Pump Station - River Height Over Time</h2>
+    <div style="width: 800px; height: 400px; margin: auto;">
+        <canvas id="brownsCkChart"></canvas>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Station</th>
+                <th>Height (m)</th>
+                <th>Tendency</th>
+                <th>Last Update</th>
+            </tr>
+        </thead>
+        <tbody id="riverTable">
+            <tr><td colspan="4">Loading data...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        let riverChart; 
+
+        async function fetchRiverData() {
+            const url = "https://data.peclet.com.au/api/explore/v2.1/catalog/datasets/bom-river-heights-data/records?where=station_name%20LIKE%20%22Wilsons%25%22%20OR%20station_name%20LIKE%20%22Richmond%25%22%20OR%20station_name%20LIKE%20%22Tweed%25%22%20OR%20station_name%20LIKE%20%22Browns%20Ck%25%22&limit=20&refine=region%3A%22Northern%20Rivers%22";
+    
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                const results = data.results;
+    
+                const brownsCkLatest = results.find(station => station.station_name.includes("Browns Ck Pump Station"));
+
+                if (brownsCkLatest) {
+                    storeHistoricalData(brownsCkLatest); 
+                    updateChart();
+                }
+
+                let tableHTML = "";
+                results.forEach(station => {
+                    let tendencyClass = station.tendency === "rising" ? "rising"
+                                    : station.tendency === "falling" ? "falling"
+                                    : "steady";
+    
+                    let heightText = station.height ? `${station.height.toFixed(2)}` : "N/A";
+    
+                    tableHTML += `
+                        <tr>
+                            <td>${station.station_name}</td>
+                            <td>${heightText}</td>
+                            <td class="${tendencyClass}">${station.tendency}</td>
+                            <td>${station.issue_date} ${station.time}</td>
+                        </tr>`;
+                });
+    
+                document.getElementById("riverTable").innerHTML = tableHTML;
+            } catch (error) {
+                console.error("Error fetching river data:", error);
+                document.getElementById("riverTable").innerHTML = "<tr><td colspan='4'>Error loading data</td></tr>";
+            }
+        }
+
+        function storeHistoricalData(newEntry) {
+            let history = JSON.parse(localStorage.getItem("brownsCkHistory")) || [];
+
+            
+            const formattedTime = new Date(newEntry.datetime).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" });
+            
+            if (!history.some(entry => entry.time === formattedTime)) {
+                history.push({ time: formattedTime, height: newEntry.height });
+            }
+            
+            if (history.length > 10) {
+                history.shift();
+            }
+
+            localStorage.setItem("brownsCkHistory", JSON.stringify(history));
+        }
+
+        function updateChart() {
+            const ctx = document.getElementById("brownsCkChart").getContext("2d");
+            let history = JSON.parse(localStorage.getItem("brownsCkHistory")) || [];
+
+            
+            if (history.length < 2) return;
+
+            
+            const labels = history.map(entry => entry.time);
+            const heights = history.map(entry => entry.height);
+    
+            
+            if (riverChart) {
+                riverChart.destroy();
+            }
+    
+            
+            riverChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: "River Height (m)",
+                        data: heights,
+                        borderColor: "#4db8ff",
+                        backgroundColor: "rgba(77, 184, 255, 0.2)",
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointBackgroundColor: "#4db8ff",
+                        tension: 0.4  
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, position: "top" }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: "Time (Last 10 Readings)" },
+                            ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 }
+                        },
+                        y: { 
+    title: { display: true, text: "Height (m)" }, 
+    suggestedMin: 4, 
+    suggestedMax: 6  
+}
+                    }
+                }
+            });
+        }
+
+        fetchRiverData(); 
+        setInterval(fetchRiverData, 60000); 
+    </script>    
+
+</body>
+</html>
