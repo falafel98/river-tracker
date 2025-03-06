@@ -39,7 +39,6 @@
         .steady {
             color: #ffff00;
         }
-       
         canvas {
             width: 800px !important;
             height: 400px !important;
@@ -82,17 +81,23 @@
 
         async function fetchRiverData() {
             const url = "https://data.peclet.com.au/api/explore/v2.1/catalog/datasets/bom-river-heights-data/records?where=station_name%20LIKE%20%22Wilsons%25%22%20OR%20station_name%20LIKE%20%22Richmond%25%22%20OR%20station_name%20LIKE%20%22Tweed%25%22%20OR%20station_name%20LIKE%20%22Browns%20Ck%25%22&limit=20&refine=region%3A%22Northern%20Rivers%22";
-    
+
             try {
+                console.log("Fetching data...");
                 const response = await fetch(url);
                 const data = await response.json();
                 const results = data.results;
-    
+
+                console.log("Fetched Data:", results);
+
                 const brownsCkLatest = results.find(station => station.station_name.includes("Browns Ck Pump Station"));
 
                 if (brownsCkLatest) {
-                    storeHistoricalData(brownsCkLatest); 
+                    console.log("Browns Ck Latest Data:", brownsCkLatest);
+                    storeHistoricalData(brownsCkLatest);
                     updateChart();
+                } else {
+                    console.warn("No Browns Ck data found.");
                 }
 
                 let tableHTML = "";
@@ -100,9 +105,9 @@
                     let tendencyClass = station.tendency === "rising" ? "rising"
                                     : station.tendency === "falling" ? "falling"
                                     : "steady";
-    
+
                     let heightText = station.height ? `${station.height.toFixed(2)}` : "N/A";
-    
+
                     tableHTML += `
                         <tr>
                             <td>${station.station_name}</td>
@@ -111,7 +116,7 @@
                             <td>${station.issue_date} ${station.time}</td>
                         </tr>`;
                 });
-    
+
                 document.getElementById("riverTable").innerHTML = tableHTML;
             } catch (error) {
                 console.error("Error fetching river data:", error);
@@ -122,37 +127,38 @@
         function storeHistoricalData(newEntry) {
             let history = JSON.parse(localStorage.getItem("brownsCkHistory")) || [];
 
-            
             const formattedTime = new Date(newEntry.datetime).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" });
-            
+
             if (!history.some(entry => entry.time === formattedTime)) {
                 history.push({ time: formattedTime, height: newEntry.height });
             }
-            
+
             if (history.length > 10) {
                 history.shift();
             }
 
             localStorage.setItem("brownsCkHistory", JSON.stringify(history));
+            console.log("Stored History:", history);
         }
 
         function updateChart() {
             const ctx = document.getElementById("brownsCkChart").getContext("2d");
             let history = JSON.parse(localStorage.getItem("brownsCkHistory")) || [];
 
-            
-            if (history.length < 2) return;
+            console.log("Loaded History for Chart:", history);
 
-            
+            if (history.length < 2) {
+                console.warn("Not enough data to render chart.");
+                return;
+            }
+
             const labels = history.map(entry => entry.time);
             const heights = history.map(entry => entry.height);
-    
-            
+
             if (riverChart) {
                 riverChart.destroy();
             }
-    
-            
+
             riverChart = new Chart(ctx, {
                 type: "line",
                 data: {
@@ -188,10 +194,12 @@
                     }
                 }
             });
+
+            console.log("Chart updated successfully.");
         }
 
         fetchRiverData(); 
-        setInterval(fetchRiverData, 60000); 
+        setInterval(fetchRiverData, 60000);
     </script>    
 
 </body>
